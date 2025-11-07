@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 
 // Utility function
@@ -55,7 +55,7 @@ export default function Debitos() {
     setError("");
 
     try {
-      const { data } = await base44.functions.invoke('consultarDebitos', params);
+      const { data } = await municipalApi.functions.invoke('consultarDebitos', params);
       setDebitos(data);
     } catch (err) {
       if (err.response?.status === 404) {

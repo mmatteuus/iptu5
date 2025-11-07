@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 
 // Utility functions
@@ -104,7 +104,7 @@ export default function StatusPagamentos() {
     setPagamentos(null);
 
     try {
-      const { data } = await base44.functions.invoke('consultarStatusPagamentos', {
+      const { data } = await municipalApi.functions.invoke('consultarStatusPagamentos', {
         [cleanDoc.length <= 11 ? 'cpf' : 'cnpj']: cleanDoc
       });
 

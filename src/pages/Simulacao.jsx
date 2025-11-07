@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import PagamentoOnline from "../components/PagamentoOnline";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 import { jsPDF } from "jspdf";
 
@@ -75,7 +75,7 @@ export default function Simulacao() {
     setSimulacao(null);
 
     try {
-      const { data } = await base44.functions.invoke('simularParcelamento', {
+      const { data } = await municipalApi.functions.invoke('simularParcelamento', {
         identificacao: {
           inscricao: imovel?.inscricao,
           cci: imovel?.cci,
@@ -113,7 +113,7 @@ export default function Simulacao() {
     setError("");
 
     try {
-      const { data } = await base44.functions.invoke('emitirDuam', {
+      const { data } = await municipalApi.functions.invoke('emitirDuam', {
         simulacao: simulacao,
         identificacao: {
           inscricao: imovel?.inscricao,

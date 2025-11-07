@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -138,7 +138,7 @@ export default function Home() {
   const loadSearchHistory = async () => {
     try {
       // Tenta carregar do usuário logado primeiro
-      const user = await base44.auth.me().catch(() => null);
+      const user = await municipalApi.auth.me().catch(() => null);
       if (user?.historico_buscas) {
         setSearchHistory(user.historico_buscas.slice(-10).reverse());
       } else {
@@ -190,13 +190,13 @@ export default function Home() {
 
       // Tenta salvar no usuário se estiver logado
       try {
-        const user = await base44.auth.me().catch(() => null);
+        const user = await municipalApi.auth.me().catch(() => null);
         if (user) {
           const historico = Array.isArray(user?.historico_buscas) ? user.historico_buscas : [];
           const filteredHistorico = historico.filter(item => item.valor !== novaBusca.valor);
           const novoHistorico = [...filteredHistorico, novaBusca].slice(-50);
           
-          await base44.auth.updateMe({ historico_buscas: novoHistorico });
+          await municipalApi.auth.updateMe({ historico_buscas: novoHistorico });
           setSearchHistory(novoHistorico.slice(-10).reverse());
           return;
         }
@@ -253,7 +253,7 @@ export default function Home() {
 
       console.log("Chamando função consultarContribuinte...");
       
-      const { data } = await base44.functions.invoke('consultarContribuinte', {
+      const { data } = await municipalApi.functions.invoke('consultarContribuinte', {
         [cleanDoc.length <= 11 ? 'cpf' : 'cnpj']: cleanDoc
       });
 

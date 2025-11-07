@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 
 function safeValue(value, defaultValue = "N/D") {
@@ -47,7 +47,7 @@ export default function DetalhesImovel() {
     setError("");
 
     try {
-      const { data } = await base44.functions.invoke('consultarDetalhesImovel', params);
+      const { data } = await municipalApi.functions.invoke('consultarDetalhesImovel', params);
       setDetalhes(data);
     } catch (err) {
       console.error("Erro ao buscar detalhes:", err);
@@ -67,7 +67,7 @@ export default function DetalhesImovel() {
     setLoadingDebitos(true);
 
     try {
-      const { data } = await base44.functions.invoke('consultarDebitos', params);
+      const { data } = await municipalApi.functions.invoke('consultarDebitos', params);
       setDebitos(data);
     } catch (err) {
       console.warn("Não foi possível carregar débitos:", err);

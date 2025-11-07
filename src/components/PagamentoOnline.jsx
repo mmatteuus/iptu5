@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 
 export default function PagamentoOnline({ simulacao, identificacao, onClose, onSuccess }) {
   const [metodoPagamento, setMetodoPagamento] = useState("pix");
@@ -52,7 +52,7 @@ export default function PagamentoOnline({ simulacao, identificacao, onClose, onS
         payload.metodo_pagamento.installments = parseInt(dadosCartao.parcelas);
       }
 
-      const { data } = await base44.functions.invoke('processarPagamentoOnline', payload);
+      const { data } = await municipalApi.functions.invoke('processarPagamentoOnline', payload);
 
       if (data.sucesso || data.status === "approved") {
         setResultado(data);

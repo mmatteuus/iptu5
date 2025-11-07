@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 
 export default function UserSettings() {
@@ -43,7 +43,7 @@ export default function UserSettings() {
 
   const loadUserData = async () => {
     try {
-      const userData = await base44.auth.me();
+      const userData = await municipalApi.auth.me();
       
       if (!userData) {
         setRequiresLogin(true);
@@ -80,7 +80,7 @@ export default function UserSettings() {
     setErrorMessage("");
 
     try {
-      await base44.auth.updateMe(formData);
+      await municipalApi.auth.updateMe(formData);
       setSuccessMessage("Configurações salvas com sucesso!");
       
       setTimeout(() => setSuccessMessage(""), 3000);
@@ -97,7 +97,7 @@ export default function UserSettings() {
 
     try {
       const metodosFiltrados = (user.metodos_pagamento_salvos || []).filter(m => m.id !== methodId);
-      await base44.auth.updateMe({ metodos_pagamento_salvos: metodosFiltrados });
+      await municipalApi.auth.updateMe({ metodos_pagamento_salvos: metodosFiltrados });
       setSuccessMessage("Método de pagamento removido!");
       loadUserData();
     } catch (error) {
@@ -109,7 +109,7 @@ export default function UserSettings() {
     if (!confirm("Deseja limpar todo o histórico de buscas?")) return;
 
     try {
-      await base44.auth.updateMe({ historico_buscas: [] });
+      await municipalApi.auth.updateMe({ historico_buscas: [] });
       setSuccessMessage("Histórico de buscas limpo!");
       loadUserData();
     } catch (error) {
@@ -163,7 +163,7 @@ export default function UserSettings() {
                     Voltar para Consulta Pública
                   </Button>
                   <Button
-                    onClick={() => base44.auth.redirectToLogin(window.location.href)}
+                    onClick={() => municipalApi.auth.redirectToLogin(window.location.href)}
                     className="flex-1 bg-blue-600 hover:bg-blue-700"
                   >
                     Fazer Login

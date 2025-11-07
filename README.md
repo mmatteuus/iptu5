@@ -1,20 +1,20 @@
-# Base44 App
+# Portal IPTU Digital
 
+Aplicação React (Vite) para consulta de contribuintes, simulação de parcelamentos,
+acompanhamento de débitos e emissão de guias de pagamento do IPTU.
 
-This app was created automatically by Base44.
-It's a Vite+React app that communicates with the Base44 API.
-
-## Running the app
+## Executando localmente
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Building the app
+## Build para produção
 
 ```bash
 npm run build
 ```
 
-For more information and support, please contact Base44 support at app@base44.com.
+Em caso de dúvidas ou sugestões, utilize os canais oficiais da equipe responsável
+pelo Portal IPTU Digital.

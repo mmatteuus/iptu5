@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { base44 } from "@/api/base44Client";
+import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
 
 export default function MonitoramentoAPI() {
@@ -59,7 +59,7 @@ export default function MonitoramentoAPI() {
     }
 
     try {
-      const { data } = await base44.functions.invoke('getApiMetrics');
+      const { data } = await municipalApi.functions.invoke('getApiMetrics');
       setMetrics(data);
     } catch (err) {
       console.error("Erro ao carregar métricas:", err);

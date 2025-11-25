@@ -58,3 +58,16 @@ arquivos estaticos (Nginx, Vercel, Cloudflare Pages etc.).
 
 Em caso de duvidas ou sugestoes, utilize os canais oficiais da equipe responsavel
 pelo Portal IPTU Digital.
+
+## Backend (SIG Integração)
+
+Um backend Express foi adicionado em `backend/` para orquestrar as chamadas reais ao SIG Integração (Prodata):
+- `/functions/consultarContribuinte`: busca imóveis por CPF/CNPJ e anexa débitos abertos/dívida ativa.
+- `/functions/consultarDebitos`: detalha débitos e dívida ativa por imóvel.
+- `/functions/consultarDetalhesImovel`: retorna dados cadastrais/endereço.
+
+Como rodar:
+1. `cd backend && cp .env.example .env` e configure `PRODATA_BASE_URL` e token.
+2. `npm install`
+3. `npm start`
+4. No front, defina `VITE_MUNICIPAL_API_URL=http://localhost:3001`

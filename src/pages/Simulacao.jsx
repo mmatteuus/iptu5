@@ -19,7 +19,6 @@ import {
 import PagamentoOnline from "../components/PagamentoOnline";
 import { municipalApi } from "@/api/municipalClient";
 import { createPageUrl } from "@/utils";
-import { jsPDF } from "jspdf";
 
 // Utility function
 function maskCPFCNPJ(value) {
@@ -186,9 +185,10 @@ export default function Simulacao() {
     link.click();
   };
 
-  const gerarPDF = () => {
+  const gerarPDF = async () => {
     if (!emitido) return;
 
+    const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();

@@ -51,23 +51,20 @@ arquivos estaticos (Nginx, Vercel, Cloudflare Pages etc.).
    o backend via `municipalApi.functions.invoke('simularParcelamento')`.
 5. Em **Pagamento Online** selecione PIX ou cartao. As requisicoes sao encaminhadas via
    `municipalApi.functions.invoke('processarPagamentoOnline')`.
-6. Monitore o status dos pagamentos e das integracoes em **StatusPagamentos** e **MonitoramentoAPI**,
+6. Monitore o status dos pagamentos e das integracoes em **StatusPagamentos** e **MonitoramentoAPI`,
    que consomem as funcoes `consultarStatusPagamentos` e `getApiMetrics`.
 7. No menu do usuario acesse **Configuracoes** para atualizar dados pessoais, limpar historico ou
    salvar metodos de pagamento. Tudo e sincronizado com `municipalApi.auth`.
 
-Em caso de duvidas ou sugestoes, utilize os canais oficiais da equipe responsavel
-pelo Portal IPTU Digital.
+## Backend (SIG Integracao)
 
-## Backend (SIG Integração)
-
-Um backend Express foi adicionado em `backend/` para orquestrar as chamadas reais ao SIG Integração (Prodata):
-- `/functions/consultarContribuinte`: busca imóveis por CPF/CNPJ e anexa débitos abertos/dívida ativa.
-- `/functions/consultarDebitos`: detalha débitos e dívida ativa por imóvel.
-- `/functions/consultarDetalhesImovel`: retorna dados cadastrais/endereço.
+Um backend Express foi adicionado em `backend/` para orquestrar as chamadas reais ao SIG Integracao (Prodata):
+- `/functions/consultarContribuinte`: busca imoveis por CPF/CNPJ e anexa debitos abertos/divida ativa.
+- `/functions/consultarDebitos`: detalha debitos e divida ativa por imovel.
+- `/functions/consultarDetalhesImovel`: retorna dados cadastrais/endereco.
 
 Como rodar:
-1. `cd backend && cp .env.example .env` e configure `PRODATA_BASE_URL` e token.
+1. `cd backend && cp .env.example .env` e configure `PRODATA_BASE_URL`, `PRODATA_USER` e `PRODATA_PASSWORD` (ou `PRODATA_AUTH_TOKEN` se usar token fixo).
 2. `npm install`
 3. `npm start`
 4. No front, defina `VITE_MUNICIPAL_API_URL=http://localhost:3001`

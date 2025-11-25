@@ -2,10 +2,10 @@ import cors from "cors";
 import express from "express";
 import morgan from "morgan";
 import { nanoid } from "nanoid";
+import { prodataFetch, PRODATA_BASE_URL } from "./prodataAuth.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const PRODATA_BASE_URL = (process.env.PRODATA_BASE_URL || "").replace(/\/$/, "");
 const PRODATA_TIMEOUT = parseInt(process.env.PRODATA_TIMEOUT_MS || "10000", 10);
 
 const ENDPOINTS = {
@@ -25,7 +25,7 @@ const ENDPOINTS = {
 
 if (!PRODATA_BASE_URL) {
   console.warn(
-    "ATENÇÃO: defina PRODATA_BASE_URL para que as consultas ao SIG Integração funcionem.",
+    "ATENCAO: defina PRODATA_BASE_URL para que as consultas ao SIG Integracao funcionem.",
   );
 }
 
@@ -76,65 +76,38 @@ function isValidCpf(cpf) {
   return rest === parseInt(digits.charAt(10), 10);
 }
 
-function buildHeaders() {
-  const headers = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-
-  const token = process.env.PRODATA_AUTH_TOKEN || process.env.PRODATA_API_KEY;
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-async function callProdata(path, { method = "GET", searchParams = {}, body } = {}) {
-  if (!PRODATA_BASE_URL) {
-    const error = new Error("Configuração ausente: PRODATA_BASE_URL");
-    error.status = 500;
-    throw error;
-  }
-
-  const url = new URL(`${PRODATA_BASE_URL}${path}`);
+function buildPath(path, searchParams = {}) {
+  const url = new URL(path, PRODATA_BASE_URL || "http://localhost");
   Object.entries(searchParams || {}).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(key, value);
     }
   });
+  return url.pathname + url.search;
+}
+
+async function callProdata(path, { method = "GET", searchParams = {}, body } = {}) {
+  const finalPath = buildPath(path, searchParams);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PRODATA_TIMEOUT);
 
+  const headers = {};
+  if (body) {
+    headers["Content-Type"] = "application/json";
+  }
+
   try {
-    const response = await fetch(url, {
+    const data = await prodataFetch(finalPath, {
       method,
-      headers: buildHeaders(),
+      headers,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
-
-    const text = await response.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-    }
-
-    if (!response.ok) {
-      const err = new Error(`Erro ao consultar Prodata (${response.status})`);
-      err.status = response.status;
-      err.data = data;
-      throw err;
-    }
-
     return data;
   } catch (error) {
     if (error.name === "AbortError") {
-      const timeoutError = new Error("Timeout ao consultar serviço externo");
+      const timeoutError = new Error("Timeout ao consultar servico externo");
       timeoutError.status = 504;
       throw timeoutError;
     }
@@ -183,7 +156,7 @@ function resolveEndereco(item) {
     .filter(Boolean)
     .join(", ");
 
-  return partes || "Endereço não informado";
+  return partes || "Endereco nao informado";
 }
 
 function mapImovelBasico(item) {
@@ -364,20 +337,20 @@ app.post("/functions/consultarContribuinte", async (req, res, next) => {
     const isCpf = documento.length === 11;
 
     if (!documento) {
-      return res.status(400).json({ error: "CPF é obrigatório." });
+      return res.status(400).json({ error: "CPF ou CNPJ e obrigatorio." });
     }
     if (isCpf && !isValidCpf(documento)) {
-      return res.status(400).json({ error: "CPF informado é inválido." });
+      return res.status(400).json({ error: "CPF informado e invalido." });
     }
     if (!isCpf && documento.length !== 14) {
-      return res.status(400).json({ error: "CNPJ informado é inválido." });
+      return res.status(400).json({ error: "CNPJ informado e invalido." });
     }
 
     const imoveis = await fetchImoveisPorDocumento(documento, isCpf);
 
     if (!imoveis.length) {
       return res.status(404).json({
-        mensagem: "Nenhum imóvel encontrado para este documento.",
+        mensagem: "Nenhum imovel encontrado para este documento.",
         totalImoveis: 0,
         itens: [],
       });
@@ -414,7 +387,7 @@ app.post("/functions/consultarDebitos", async (req, res, next) => {
 
     if (!identificador) {
       return res.status(400).json({
-        error: "É necessário informar inscrição ou CCI do imóvel.",
+        error: "Informe inscricao ou CCI do imovel.",
       });
     }
 
@@ -426,7 +399,7 @@ app.post("/functions/consultarDebitos", async (req, res, next) => {
     if (!duams.length && !dividasAtivas.length) {
       return res
         .status(404)
-        .json({ error: "Nenhum débito encontrado para este imóvel." });
+        .json({ error: "Nenhum debito encontrado para este imovel." });
     }
 
     const detalhes = await fetchDetalhesImovel({
@@ -467,13 +440,13 @@ app.post("/functions/consultarDetalhesImovel", async (req, res, next) => {
     if (!inscricao && !cci) {
       return res
         .status(400)
-        .json({ error: "Informe inscrição ou CCI para consultar o imóvel." });
+        .json({ error: "Informe inscricao ou CCI para consultar o imovel." });
     }
 
     const detalhes = await fetchDetalhesImovel({ inscricao, cci });
 
     if (!detalhes) {
-      return res.status(404).json({ error: "Imóvel não encontrado." });
+      return res.status(404).json({ error: "Imovel nao encontrado." });
     }
 
     const detalhesMapeados = mapDetalhesImovel(detalhes);
@@ -483,23 +456,23 @@ app.post("/functions/consultarDetalhesImovel", async (req, res, next) => {
   }
 });
 
-// Rotas ainda não implementadas, mantidas para compatibilidade com o front
+// Rotas nao implementadas, mantidas para compatibilidade com o front
 app.post("/functions/simularParcelamento", (_req, res) => {
-  res.status(501).json({ error: "Simulação não implementada neste backend." });
+  res.status(501).json({ error: "Simulacao nao implementada neste backend." });
 });
 
 app.post("/functions/emitirDuam", (_req, res) => {
-  res.status(501).json({ error: "Emissão de DUAM não implementada." });
+  res.status(501).json({ error: "Emissao de DUAM nao implementada." });
 });
 
 app.post("/functions/processarPagamentoOnline", (_req, res) => {
   res
     .status(501)
-    .json({ error: "Pagamento online não implementado neste backend." });
+    .json({ error: "Pagamento online nao implementado neste backend." });
 });
 
 app.post("/functions/consultarStatusPagamentos", (_req, res) => {
-  res.status(501).json({ error: "Consulta de status não implementada." });
+  res.status(501).json({ error: "Consulta de status nao implementada." });
 });
 
 app.post("/functions/getApiMetrics", (_req, res) => {
@@ -529,13 +502,21 @@ app.use((err, req, res, _next) => {
   if (status === 504) {
     return res
       .status(504)
-      .json({ error: "Serviço temporariamente indisponível. Tente novamente." });
+      .json({ error: "Servico temporariamente indisponivel. Tente novamente." });
   }
 
   if (status === 404) {
     return res
       .status(404)
-      .json({ error: "Registro não encontrado para os parâmetros informados." });
+      .json({ error: "Registro nao encontrado para os parametros informados." });
+  }
+
+  if (status === 401) {
+    return res
+      .status(401)
+      .json({
+        error: "Falha na autenticacao com o sistema Prodata. Verifique as credenciais.",
+      });
   }
 
   if (status >= 500) {
@@ -545,7 +526,7 @@ app.use((err, req, res, _next) => {
   }
 
   return res.status(status).json({
-    error: err.message || "Erro ao processar requisição.",
+    error: err.message || "Erro ao processar requisicao.",
     detalhes: err.data,
   });
 });

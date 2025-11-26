@@ -21,6 +21,27 @@ const ENDPOINTS = {
   detalhesImovel:
     process.env.PRODATA_ENDPOINT_DETALHES_IMOVEL ||
     "/arrecadacao/registroImobiliario",
+  consultaDuams:
+    process.env.PRODATA_ENDPOINT_CONSULTA_DUAMS ||
+    "/arrecadacao/consultaDuams",
+  simularParcelamento:
+    process.env.PRODATA_ENDPOINT_SIMULAR_PARCELAMENTO ||
+    "/arrecadacao/simulacaoRepactuacao",
+  gerarDuamVirtual:
+    process.env.PRODATA_ENDPOINT_GERAR_DUAM_VIRTUAL ||
+    "/arrecadacao/gerarDuamVirtual",
+  imprimirDuam:
+    process.env.PRODATA_ENDPOINT_IMPRIMIR_DUAM ||
+    "/arrecadacao/imprimirDuam",
+  imprimirDuamVirtual:
+    process.env.PRODATA_ENDPOINT_IMPRIMIR_DUAM_VIRTUAL ||
+    "/arrecadacao/imprimirDuamVirtual",
+  consultaContribuinte:
+    process.env.PRODATA_ENDPOINT_CONSULTA_CONTRIBUINTE ||
+    "/arrecadacao/consultaContribuinte",
+  consultaImobiliaria:
+    process.env.PRODATA_ENDPOINT_CONSULTA_IMOBILIARIA ||
+    "/arrecadacao/consultaImobiliaria",
 };
 
 if (!PRODATA_BASE_URL) {
@@ -55,6 +76,17 @@ function normalizeDocumento(value) {
   return (value || "").toString().replace(/\D/g, "");
 }
 
+function maskDocumento(value) {
+  const doc = normalizeDocumento(value || "");
+  if (doc.length === 11) {
+    return doc.replace(/(\d{3})\d{5}(\d{3})/, "$1*****$2");
+  }
+  if (doc.length === 14) {
+    return doc.replace(/(\d{2})\d{8}(\d{2})/, "$1********$2");
+  }
+  return "n/d";
+}
+
 function isValidCpf(cpf) {
   const digits = normalizeDocumento(cpf);
   if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
@@ -86,7 +118,10 @@ function buildPath(path, searchParams = {}) {
   return url.pathname + url.search;
 }
 
-async function callProdata(path, { method = "GET", searchParams = {}, body } = {}) {
+async function callProdata(
+  path,
+  { method = "GET", searchParams = {}, body, accept } = {},
+) {
   const finalPath = buildPath(path, searchParams);
 
   const controller = new AbortController();
@@ -95,6 +130,9 @@ async function callProdata(path, { method = "GET", searchParams = {}, body } = {
   const headers = {};
   if (body) {
     headers["Content-Type"] = "application/json";
+  }
+  if (accept) {
+    headers.Accept = accept;
   }
 
   try {
@@ -198,6 +236,96 @@ function mapDuam(item) {
     desconto: Number(item.desconto || item.valorDesconto || 0),
     valor: Number(item.valorAtualizado || item.valorAPagar || item.valor || 0),
     vencimento: item.vencimento || item.dataVencimento || item.dtVenc || null,
+  };
+}
+
+function mapDuamParcelaCompleta(parcela) {
+  if (!parcela) return {};
+  return {
+    parcela: parcela.parcela || parcela.pacela || parcela.nrParcela || null,
+    vencimento:
+      parcela.dataVenc ||
+      parcela.dataVencimento ||
+      parcela.dataVencPgto ||
+      parcela.dataVencAtu ||
+      parcela.dataVencPagamento ||
+      null,
+    valor: Number(
+      parcela.valorPrincipal ||
+        parcela.valor ||
+        parcela.valorDivida ||
+        parcela.valorSaldo ||
+        0,
+    ),
+    valorPago: Number(parcela.valorPago || 0),
+    valorAtualizacao: Number(
+      parcela.valorAtualizacao || parcela.valorConvertido || 0,
+    ),
+    codigoBarras: parcela.cdBarra || parcela.cdBarras || null,
+    linhaDigitavel: parcela.strBarra || parcela.strBarras || null,
+    aviso: parcela.aviso || null,
+    processoDivida: parcela.processoDivida || null,
+  };
+}
+
+function mapDuamCompleto(item) {
+  if (!item) return {};
+  const parcelas = Array.isArray(item.duamParcelas)
+    ? item.duamParcelas.map(mapDuamParcelaCompleta)
+    : [];
+  const total = parcelas.reduce(
+    (sum, p) => sum + (Number.isFinite(p.valor) ? p.valor : 0),
+    0,
+  );
+
+  return {
+    duam: item.duam || item.numeroDuam || item.id || null,
+    exercicio: item.anoRef || item.ano || item.exercicio || null,
+    mesRef: item.mesRef || null,
+    receita: item.nomeReceita || item.receita || null,
+    cci: item.cci || null,
+    ccp: item.ccp || null,
+    inscricaoMunicipal: item.inscMunicipal || item.inscricao || null,
+    nomeContribuinte: item.nomeContribuinte || null,
+    parcelas,
+    valorTotal: total,
+  };
+}
+
+function mapDuamVirtual(raw) {
+  if (!raw) return {};
+  const itens = Array.isArray(raw.duamVirtualItem) ? raw.duamVirtualItem : [];
+  const parcelas = itens.map((item) => ({
+    parcela: item.pacela || item.parcela || null,
+    vencimento: item.dataVencimento || null,
+    valor: Number(
+      item.valorPrincipal ||
+        item.valor ||
+        item.valorDivida ||
+        item.valorSaldo ||
+        0,
+    ),
+    codigoBarras: item.cdBarras || item.strBarras || null,
+    linhaDigitavel: item.strBarras || null,
+    qrcodePix: item.qrcodePix || null,
+    linkQrcodePix: item.linkQrcodePix || null,
+    receitaPrincipal: item.receitaPrincipal || null,
+    nomeReceitaPrincipal: item.nomeReceitaPrincipal || null,
+  }));
+
+  const total = parcelas.reduce(
+    (sum, p) => sum + (Number.isFinite(p.valor) ? p.valor : 0),
+    0,
+  );
+
+  return {
+    duamReferencia: raw.duamReferencia || raw.duam || null,
+    cpfCnpj: raw.cpfCnpj || null,
+    nomeContribuinte: raw.nomeContribuinte || null,
+    receita: raw.nomeReceita || raw.nomeReceitaPrincipal || null,
+    observacao: raw.observacao || null,
+    parcelas,
+    valorTotal: total,
   };
 }
 
@@ -330,6 +458,269 @@ function mapDetalhesImovel(raw) {
     situacao: raw.situacao || raw.status || raw.situacaoCadastral,
   };
 }
+
+async function consultarDuamsSig(params = {}) {
+  const resposta = await callProdata(ENDPOINTS.consultaDuams, {
+    searchParams: {
+      ccp: params.ccp,
+      cci: params.cci,
+      inscricao: params.inscricao,
+      ano: params.ano,
+      mes: params.mes,
+      receita: params.receita,
+      somenteDivida: params.somenteDivida,
+    },
+  });
+  const duams = resposta?.duams || resposta?.itens || resposta?.data || [];
+  return {
+    duams: duams.map(mapDuamCompleto),
+  };
+}
+
+async function consultarContribuinteSig(cpfCnpj) {
+  if (!cpfCnpj) return null;
+  return callProdata(ENDPOINTS.consultaContribuinte, {
+    searchParams: { cpfCnpj },
+  });
+}
+
+async function simularParcelamentoSig(payload) {
+  return callProdata(ENDPOINTS.simularParcelamento, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+async function gerarDuamVirtualSig(payload) {
+  const resposta = await callProdata(ENDPOINTS.gerarDuamVirtual, {
+    method: "POST",
+    body: payload,
+  });
+  return mapDuamVirtual(resposta);
+}
+
+async function imprimirDuamSig({ duam, parcelas, ccp, isTodasParcela }) {
+  return callProdata(ENDPOINTS.imprimirDuam, {
+    searchParams: { duam, parcelas, ccp, isTodasParcela },
+    accept: "application/pdf",
+  });
+}
+
+async function imprimirDuamVirtualSig(body) {
+  return callProdata(ENDPOINTS.imprimirDuamVirtual, {
+    method: "POST",
+    body,
+    accept: "application/pdf",
+  });
+}
+
+app.post("/api/public/boletos/consulta", async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const cpfCnpj = normalizeDocumento(body.cpfCnpj || body.cpf || body.cnpj);
+    const inscricao =
+      normalizeDocumento(body.inscricaoImobiliaria || body.inscricao) || null;
+    const cci = normalizeDocumento(body.cci || "");
+    const ccp = body.ccp ? Number(body.ccp) : undefined;
+    const ano = body.ano ? Number(body.ano) : undefined;
+    const mes = body.mes ? Number(body.mes) : undefined;
+    const receita = body.receita || body.receitaPrincipal;
+
+    if (!cpfCnpj) {
+      return res.status(400).json({ error: "cpfCnpj e obrigatorio." });
+    }
+    if (cpfCnpj.length === 11 && !isValidCpf(cpfCnpj)) {
+      return res.status(400).json({ error: "CPF informado e invalido." });
+    }
+    if (cpfCnpj.length !== 11 && cpfCnpj.length !== 14) {
+      return res.status(400).json({ error: "CPF/CNPJ deve ter 11 ou 14 digitos." });
+    }
+
+    if (!inscricao && !cci && !ccp) {
+      return res.status(400).json({
+        error: "Informe inscricao, CCI ou CCP do imovel para consultar debitos.",
+      });
+    }
+
+    // valida vinculo (best-effort, nao bloqueia)
+    await consultarContribuinteSig(cpfCnpj).catch((err) => {
+      console.warn(
+        "[SIG][consultaContribuinte][warn]",
+        err.message || err,
+        "cpf=",
+        maskDocumento(cpfCnpj),
+      );
+      return null;
+    });
+
+    const consulta = await consultarDuamsSig({
+      ccp,
+      cci: cci || undefined,
+      inscricao: inscricao || cci || ccp,
+      ano,
+      mes,
+      receita,
+      somenteDivida: false,
+    });
+
+    const duams = consulta.duams || [];
+    if (!duams.length) {
+      return res
+        .status(404)
+        .json({ error: "Nenhum debito encontrado para os parametros informados." });
+    }
+
+    const total = duams.reduce(
+      (sum, item) => sum + (Number.isFinite(item.valorTotal) ? item.valorTotal : 0),
+      0,
+    );
+
+    res.json({
+      cpfCnpj,
+      inscricao: inscricao || null,
+      quantidadeDebitos: duams.length,
+      totalDebitos: total,
+      debitos: duams,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/boletos/simular", async (req, res, next) => {
+  try {
+    const payload = req.body || {};
+    const requiredCampos = [
+      "codigoBaixa",
+      "codigoCondicaoRefis",
+      "codigoRefis",
+      "dataFinal",
+      "dataInicial",
+      "devedor",
+      "duams",
+      "obs",
+      "outrasReceitas",
+      "percentualValorEntrada",
+      "receitaRepactuacao",
+      "receitas",
+      "tipoDebito",
+      "tipoDevedor",
+      "tipoEntrada",
+      "tipoPesquisa",
+      "tipoSimulacao",
+      "usuario",
+      "valorParcelas",
+      "vencimento",
+    ];
+    const missing = requiredCampos.filter(
+      (campo) =>
+        payload[campo] === undefined ||
+        payload[campo] === null ||
+        payload[campo] === "",
+    );
+    if (missing.length) {
+      return res.status(400).json({
+        error: "Campos obrigatorios ausentes para simulacao.",
+        campos: missing,
+      });
+    }
+
+    const simulacao = await simularParcelamentoSig(payload);
+    res.json({ simulacao });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/boletos/gerar", async (req, res, next) => {
+  try {
+    const payload = req.body || {};
+    const dto = {
+      ...payload,
+      cpfCnpj: normalizeDocumento(payload.cpfCnpj),
+    };
+    const requiredCampos = [
+      "cpfCnpj",
+      "nomeContribuinte",
+      "anoRef",
+      "mesRef",
+      "parcelas",
+      "receitaPrincipal",
+    ];
+    const missing = requiredCampos.filter(
+      (campo) =>
+        dto[campo] === undefined || dto[campo] === null || dto[campo] === "",
+    );
+    if (missing.length) {
+      return res.status(400).json({
+        error: "Campos obrigatorios ausentes para geracao do DUAM virtual.",
+        campos: missing,
+      });
+    }
+
+    const duamVirtual = await gerarDuamVirtualSig(dto);
+    res.json(duamVirtual);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/boletos/imprimir", async (req, res, next) => {
+  try {
+    const { duam, parcelas, ccp, isTodasParcela } = req.body || {};
+    if (!duam || !parcelas || !ccp) {
+      return res.status(400).json({
+        error: "Informe duam, parcelas (ex: 1 ou 1,2) e ccp para imprimir.",
+      });
+    }
+
+    const pdf = await imprimirDuamSig({
+      duam,
+      parcelas,
+      ccp,
+      isTodasParcela,
+    });
+
+    if (!pdf) {
+      return res
+        .status(404)
+        .json({ error: "Nao foi possivel gerar o PDF do DUAM." });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.send(pdf);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/boletos/imprimir-virtual", async (req, res, next) => {
+  try {
+    const { duam, parcela, imprimirTodasParcela } = req.body || {};
+    if (!duam || parcela === undefined) {
+      return res.status(400).json({
+        error: "Informe duam e parcela para imprimir o DUAM virtual.",
+      });
+    }
+
+    const pdf = await imprimirDuamVirtualSig({
+      duam,
+      parcela,
+      imprimirTodasParcela: Boolean(imprimirTodasParcela),
+    });
+
+    if (!pdf) {
+      return res
+        .status(404)
+        .json({ error: "Nao foi possivel gerar o PDF do DUAM virtual." });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.send(pdf);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.post("/functions/consultarContribuinte", async (req, res, next) => {
   try {
@@ -482,12 +873,7 @@ app.post("/functions/getApiMetrics", (_req, res) => {
 app.use((err, req, res, _next) => {
   const status = err.status || 500;
   const doc = normalizeDocumento(req.body?.cpf || req.body?.cnpj || "");
-  const maskedDoc =
-    doc.length === 11
-      ? doc.replace(/(\d{3})\d{5}(\d{3})/, "$1*****$2")
-      : doc.length === 14
-        ? doc.replace(/(\d{2})\d{8}(\d{2})/, "$1********$2")
-        : "n/d";
+  const maskedDoc = maskDocumento(doc);
 
   console.error(
     `[${req.correlationId}] Erro:`,

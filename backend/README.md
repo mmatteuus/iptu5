@@ -1,16 +1,13 @@
 # Backend IPTU (SIG Integracao)
 
-API Express que orquestra chamadas ao SIG Integracao (Prodata):
-- Buscar imoveis por CPF/CNPJ (`/functions/consultarContribuinte`)
-- Consultar debitos e divida ativa por imovel (`/functions/consultarDebitos`)
-- Consultar detalhes do imovel (`/functions/consultarDetalhesImovel`)
+API Express que orquestra chamadas ao SIG Integracao (Prodata) com rotas publicas para consulta, simulacao e geracao de DUAM/boletos.
 
 ## Configuracao
 
 1) Copie `.env.example` para `.env` e preencha:
 ```
 PRODATA_BASE_URL=https://seu-endpoint-sig.com
-PRODATA_AUTH_PATH=/auth    # use /autenticacao se sua instância exigir
+PRODATA_AUTH_PATH=/auth    # use /autenticacao se sua instancia exigir
 PRODATA_USER=seu_usuario_ou_cpf
 PRODATA_PASSWORD=sua_senha
 # Se quiser token fixo, opcionalmente defina PRODATA_AUTH_TOKEN
@@ -38,19 +35,33 @@ VITE_MUNICIPAL_API_URL=http://localhost:3001
 
 ## Endpoints expostos
 
+Novos para o front publico:
+
+- `POST /api/public/boletos/consulta`
+  - Corpo: `{ "cpfCnpj": "...", "inscricaoImobiliaria": "...", "ano": 2025, "cci": "...", "ccp": "..." }`
+  - Retorna lista de DUAMs com parcelas (linha digitavel/codigo de barras) filtrando por inscricao/CCI/CCP.
+
+- `POST /api/public/boletos/simular`
+  - Corpo segue o DTO do SIG `/arrecadacao/simulacaoRepactuacao` (campos obrigatorios validados). Responde com a simulacao do SIG.
+
+- `POST /api/public/boletos/gerar`
+  - Corpo segue o DTO do SIG `/arrecadacao/gerarDuamVirtual` (cpfCnpj, nomeContribuinte, anoRef, mesRef, parcelas, receitaPrincipal + opcionais). Retorna DUAM virtual normalizado (parcelas com linha digitavel/pix).
+
+- `POST /api/public/boletos/imprimir`
+  - Corpo: `{ "duam": 123, "parcelas": "1" ou "1,2", "ccp": 456, "isTodasParcela": false }`
+  - Retorna PDF do DUAM real.
+
+- `POST /api/public/boletos/imprimir-virtual`
+  - Corpo: `{ "duam": 123, "parcela": 1, "imprimirTodasParcela": false }`
+  - Retorna PDF do DUAM virtual.
+
+Rotas legadas mantidas para compatibilidade:
+
 - `POST /functions/consultarContribuinte`
-  - Corpo: `{ "cpf": "12345678900" }` ou `{ "cnpj": "12345678000199" }`
-  - Retorna: `{ totalImoveis, itens: [ { inscricao, cci, endereco, situacao, dividasAtivas, iptuPendentes, ... } ] }`
-
 - `POST /functions/consultarDebitos`
-  - Corpo: `{ "cci": "12345" }` (ou `inscricao`/`ccp`)
-  - Retorna: `{ imovel, proprietario, itens: [duams], dividasAtivas, quantidadeDebitos, totalDebitos }`
-
 - `POST /functions/consultarDetalhesImovel`
-  - Corpo: `{ "cci": "12345" }` (ou `inscricao`)
-  - Retorna dados cadastrais/endereco do imovel.
 
-Rotas de simulacao/emissao/pagamento retornam `501` apenas para manter compatibilidade com o front.
+Rotas de simulacao/emissao/pagamento na namespace `/functions` retornam `501` apenas para manter compatibilidade com o front antigo.
 
 ## Notas de implementacao
 

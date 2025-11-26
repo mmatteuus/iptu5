@@ -32,7 +32,7 @@ async function requestNewToken() {
       Accept: "application/json",
     },
     body: JSON.stringify({
-      usuario: PRODATA_USER,
+      username: PRODATA_USER,
       senha: PRODATA_PASSWORD,
     }),
   });
@@ -67,7 +67,8 @@ async function requestNewToken() {
   const now = Date.now();
   cachedToken = {
     value: rawToken,
-    expiresAt: now + (expiresInSeconds - 30) * 1000,
+    // padrao: 50min para reduzir revalidacoes frequentes
+    expiresAt: now + ((expiresInSeconds || 50 * 60) - 30) * 1000,
   };
 
   return rawToken;
@@ -100,6 +101,19 @@ export async function prodataFetch(path, init = {}) {
     headers,
   });
 
+  const parseResponse = async (response) => {
+    if (response.status === 204) return undefined;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/pdf")) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      return buffer;
+    }
+    if (contentType.includes("application/json") || contentType === "") {
+      return response.json().catch(() => null);
+    }
+    return response.text().catch(() => null);
+  };
+
   if (res.status === 401) {
     // tenta renovar
     cachedToken = null;
@@ -121,9 +135,7 @@ export async function prodataFetch(path, init = {}) {
       err.data = body;
       throw err;
     }
-    if (retryRes.status === 204) return undefined;
-    const retryJson = await retryRes.json().catch(() => null);
-    return retryJson;
+    return parseResponse(retryRes);
   }
 
   if (!res.ok) {
@@ -142,9 +154,7 @@ export async function prodataFetch(path, init = {}) {
     throw err;
   }
 
-  if (res.status === 204) return undefined;
-  const json = await res.json().catch(() => null);
-  return json;
+  return parseResponse(res);
 }
 
 export { PRODATA_BASE_URL, PRODATA_AUTH_PATH };

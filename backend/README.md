@@ -12,6 +12,9 @@ PRODATA_USER=seu_usuario_ou_cpf
 PRODATA_PASSWORD=sua_senha
 # Se quiser token fixo, opcionalmente defina PRODATA_AUTH_TOKEN
 PORT=3001
+# Auditoria opcional para /admin/auditoria/boletos
+# AUDITORIA_MAX_ITENS=500
+# ADMIN_API_KEY=sua_chave_admin
 ```
 Demais variaveis opcionais estao no `.env.example` (paginacao, timeouts, caminhos de endpoints).
 
@@ -55,6 +58,9 @@ Novos para o front publico:
   - Corpo: `{ "duam": 123, "parcela": 1, "imprimirTodasParcela": false }`
   - Retorna PDF do DUAM virtual.
 
+Interno (audit master):
+- `GET /admin/auditoria/boletos?limit=100` (requer header `x-admin-key` se `ADMIN_API_KEY` definido). Retorna buffer de auditoria: timestamp, operacao, cpf mascarado/hash, credencial de servico, endpoint SIG, status, resultado.
+
 Rotas legadas mantidas para compatibilidade:
 
 - `POST /functions/consultarContribuinte`
@@ -70,3 +76,4 @@ Rotas de simulacao/emissao/pagamento na namespace `/functions` retornam `501` ap
 - Paginacao configuravel via `PRODATA_IMOVEIS_PAGE_SIZE` e `PRODATA_IMOVEIS_MAX_PAGES`.
 - Timeout padrao de 10s (`PRODATA_TIMEOUT_MS`).
 - `Authorization: Bearer <token>` enviado automaticamente apos login (ou via token fixo). Cada requisicao recebe `x-correlation-id` para rastreamento.
+- Auditoria guarda hash+mascara do CPF/CNPJ do solicitante, endpoint SIG chamado, status e credencial de servico usada (`PRODATA_USER`). Buffer configuravel via `AUDITORIA_MAX_ITENS`.

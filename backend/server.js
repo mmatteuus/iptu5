@@ -3,10 +3,16 @@ import express from "express";
 import morgan from "morgan";
 import { nanoid } from "nanoid";
 import { prodataFetch, PRODATA_BASE_URL } from "./prodataAuth.js";
+import { createHash } from "crypto";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const PRODATA_TIMEOUT = parseInt(process.env.PRODATA_TIMEOUT_MS || "10000", 10);
+const AUDITORIA_MAX_ITENS = parseInt(
+  process.env.AUDITORIA_MAX_ITENS || "500",
+  10,
+);
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || null;
 
 const ENDPOINTS = {
   imoveis:
@@ -85,6 +91,24 @@ function maskDocumento(value) {
     return doc.replace(/(\d{2})\d{8}(\d{2})/, "$1********$2");
   }
   return "n/d";
+}
+
+function hashDocumento(value) {
+  const doc = normalizeDocumento(value || "");
+  return createHash("sha256").update(doc).digest("hex");
+}
+
+const auditoriaBuffer = [];
+
+function registrarAuditoria(entry) {
+  auditoriaBuffer.push({
+    id: nanoid(),
+    timestamp: new Date().toISOString(),
+    ...entry,
+  });
+  if (auditoriaBuffer.length > AUDITORIA_MAX_ITENS) {
+    auditoriaBuffer.splice(0, auditoriaBuffer.length - AUDITORIA_MAX_ITENS);
+  }
 }
 
 function isValidCpf(cpf) {
@@ -553,35 +577,79 @@ app.post("/api/public/boletos/consulta", async (req, res, next) => {
       return null;
     });
 
-    const consulta = await consultarDuamsSig({
-      ccp,
-      cci: cci || undefined,
-      inscricao: inscricao || cci || ccp,
-      ano,
-      mes,
-      receita,
-      somenteDivida: false,
-    });
+    let resultado = "OK";
+    let sigStatus = 200;
+    try {
+      const consulta = await consultarDuamsSig({
+        ccp,
+        cci: cci || undefined,
+        inscricao: inscricao || cci || ccp,
+        ano,
+        mes,
+        receita,
+        somenteDivida: false,
+      });
 
-    const duams = consulta.duams || [];
-    if (!duams.length) {
-      return res
-        .status(404)
-        .json({ error: "Nenhum debito encontrado para os parametros informados." });
+      const duams = consulta.duams || [];
+      if (!duams.length) {
+        resultado = "ERRO_NEGOCIO";
+        sigStatus = 404;
+        registrarAuditoria({
+          tipo_operacao: "consulta_boleto",
+          sig_endpoint: ENDPOINTS.consultaDuams,
+          sig_status_code: sigStatus,
+          resultado,
+          cpf_cnpj_solicitante_hash: hashDocumento(cpfCnpj),
+          cpf_cnpj_solicitante_masked: maskDocumento(cpfCnpj),
+          origin_ip: req.ip || req.headers["x-forwarded-for"],
+          origin_user_agent: req.headers["user-agent"],
+          credencial_servico: process.env.PRODATA_USER || "desconhecido",
+        });
+        return res
+          .status(404)
+          .json({ error: "Nenhum debito encontrado para os parametros informados." });
+      }
+
+      const total = duams.reduce(
+        (sum, item) => sum + (Number.isFinite(item.valorTotal) ? item.valorTotal : 0),
+        0,
+      );
+
+      registrarAuditoria({
+        tipo_operacao: "consulta_boleto",
+        sig_endpoint: ENDPOINTS.consultaDuams,
+        sig_status_code: sigStatus,
+        resultado,
+        cpf_cnpj_solicitante_hash: hashDocumento(cpfCnpj),
+        cpf_cnpj_solicitante_masked: maskDocumento(cpfCnpj),
+        origin_ip: req.ip || req.headers["x-forwarded-for"],
+        origin_user_agent: req.headers["user-agent"],
+        credencial_servico: process.env.PRODATA_USER || "desconhecido",
+      });
+
+      res.json({
+        cpfCnpj,
+        inscricao: inscricao || null,
+        quantidadeDebitos: duams.length,
+        totalDebitos: total,
+        debitos: duams,
+      });
+    } catch (err) {
+      resultado = "ERRO_TECNICO";
+      sigStatus = err?.status || 500;
+      registrarAuditoria({
+        tipo_operacao: "consulta_boleto",
+        sig_endpoint: ENDPOINTS.consultaDuams,
+        sig_status_code: sigStatus,
+        resultado,
+        cpf_cnpj_solicitante_hash: hashDocumento(cpfCnpj),
+        cpf_cnpj_solicitante_masked: maskDocumento(cpfCnpj),
+        origin_ip: req.ip || req.headers["x-forwarded-for"],
+        origin_user_agent: req.headers["user-agent"],
+        credencial_servico: process.env.PRODATA_USER || "desconhecido",
+      });
+      throw err;
     }
-
-    const total = duams.reduce(
-      (sum, item) => sum + (Number.isFinite(item.valorTotal) ? item.valorTotal : 0),
-      0,
-    );
-
-    res.json({
-      cpfCnpj,
-      inscricao: inscricao || null,
-      quantidadeDebitos: duams.length,
-      totalDebitos: total,
-      debitos: duams,
-    });
   } catch (error) {
     next(error);
   }
@@ -612,21 +680,49 @@ app.post("/api/public/boletos/simular", async (req, res, next) => {
       "valorParcelas",
       "vencimento",
     ];
-    const missing = requiredCampos.filter(
-      (campo) =>
-        payload[campo] === undefined ||
-        payload[campo] === null ||
-        payload[campo] === "",
-    );
-    if (missing.length) {
-      return res.status(400).json({
-        error: "Campos obrigatorios ausentes para simulacao.",
-        campos: missing,
-      });
-    }
+  const missing = requiredCampos.filter(
+    (campo) =>
+      payload[campo] === undefined ||
+      payload[campo] === null ||
+      payload[campo] === "",
+  );
+  if (missing.length) {
+    return res.status(400).json({
+      error: "Campos obrigatorios ausentes para simulacao.",
+      campos: missing,
+    });
+  }
 
-    const simulacao = await simularParcelamentoSig(payload);
-    res.json({ simulacao });
+    try {
+      const simulacao = await simularParcelamentoSig(payload);
+
+      registrarAuditoria({
+        tipo_operacao: "simulacao_boleto",
+        sig_endpoint: ENDPOINTS.simularParcelamento,
+        sig_status_code: 200,
+        resultado: "OK",
+        cpf_cnpj_solicitante_hash: hashDocumento(payload?.cpfCnpj || ""),
+        cpf_cnpj_solicitante_masked: maskDocumento(payload?.cpfCnpj || ""),
+        origin_ip: req.ip || req.headers["x-forwarded-for"],
+        origin_user_agent: req.headers["user-agent"],
+        credencial_servico: process.env.PRODATA_USER || "desconhecido",
+      });
+
+      res.json({ simulacao });
+    } catch (error) {
+      registrarAuditoria({
+        tipo_operacao: "simulacao_boleto",
+        sig_endpoint: ENDPOINTS.simularParcelamento,
+        sig_status_code: error?.status || 500,
+        resultado: "ERRO_TECNICO",
+        cpf_cnpj_solicitante_hash: hashDocumento(req.body?.cpfCnpj || ""),
+        cpf_cnpj_solicitante_masked: maskDocumento(req.body?.cpfCnpj || ""),
+        origin_ip: req.ip || req.headers["x-forwarded-for"],
+        origin_user_agent: req.headers["user-agent"],
+        credencial_servico: process.env.PRODATA_USER || "desconhecido",
+      });
+      next(error);
+    }
   } catch (error) {
     next(error);
   }
@@ -647,19 +743,47 @@ app.post("/api/public/boletos/gerar", async (req, res, next) => {
       "parcelas",
       "receitaPrincipal",
     ];
-    const missing = requiredCampos.filter(
-      (campo) =>
-        dto[campo] === undefined || dto[campo] === null || dto[campo] === "",
-    );
-    if (missing.length) {
+  const missing = requiredCampos.filter(
+    (campo) =>
+      dto[campo] === undefined || dto[campo] === null || dto[campo] === "",
+  );
+  if (missing.length) {
       return res.status(400).json({
         error: "Campos obrigatorios ausentes para geracao do DUAM virtual.",
         campos: missing,
       });
     }
 
-    const duamVirtual = await gerarDuamVirtualSig(dto);
-    res.json(duamVirtual);
+    try {
+      const duamVirtual = await gerarDuamVirtualSig(dto);
+
+      registrarAuditoria({
+        tipo_operacao: "geracao_boleto",
+        sig_endpoint: ENDPOINTS.gerarDuamVirtual,
+        sig_status_code: 200,
+        resultado: "OK",
+        cpf_cnpj_solicitante_hash: hashDocumento(dto.cpfCnpj || ""),
+        cpf_cnpj_solicitante_masked: maskDocumento(dto.cpfCnpj || ""),
+        origin_ip: req.ip || req.headers["x-forwarded-for"],
+        origin_user_agent: req.headers["user-agent"],
+        credencial_servico: process.env.PRODATA_USER || "desconhecido",
+      });
+
+      res.json(duamVirtual);
+    } catch (error) {
+      registrarAuditoria({
+        tipo_operacao: "geracao_boleto",
+        sig_endpoint: ENDPOINTS.gerarDuamVirtual,
+        sig_status_code: error?.status || 500,
+        resultado: "ERRO_TECNICO",
+        cpf_cnpj_solicitante_hash: hashDocumento(dto.cpfCnpj || ""),
+        cpf_cnpj_solicitante_masked: maskDocumento(dto.cpfCnpj || ""),
+        origin_ip: req.ip || req.headers["x-forwarded-for"],
+        origin_user_agent: req.headers["user-agent"],
+        credencial_servico: process.env.PRODATA_USER || "desconhecido",
+      });
+      next(error);
+    }
   } catch (error) {
     next(error);
   }
@@ -687,9 +811,32 @@ app.post("/api/public/boletos/imprimir", async (req, res, next) => {
         .json({ error: "Nao foi possivel gerar o PDF do DUAM." });
     }
 
+    registrarAuditoria({
+      tipo_operacao: "impressao_boleto",
+      sig_endpoint: ENDPOINTS.imprimirDuam,
+      sig_status_code: 200,
+      resultado: "OK",
+      cpf_cnpj_solicitante_hash: hashDocumento(req.body?.cpfCnpj || ""),
+      cpf_cnpj_solicitante_masked: maskDocumento(req.body?.cpfCnpj || ""),
+      origin_ip: req.ip || req.headers["x-forwarded-for"],
+      origin_user_agent: req.headers["user-agent"],
+      credencial_servico: process.env.PRODATA_USER || "desconhecido",
+    });
+
     res.setHeader("Content-Type", "application/pdf");
     res.send(pdf);
   } catch (error) {
+    registrarAuditoria({
+      tipo_operacao: "impressao_boleto",
+      sig_endpoint: ENDPOINTS.imprimirDuam,
+      sig_status_code: error?.status || 500,
+      resultado: "ERRO_TECNICO",
+      cpf_cnpj_solicitante_hash: hashDocumento(req.body?.cpfCnpj || ""),
+      cpf_cnpj_solicitante_masked: maskDocumento(req.body?.cpfCnpj || ""),
+      origin_ip: req.ip || req.headers["x-forwarded-for"],
+      origin_user_agent: req.headers["user-agent"],
+      credencial_servico: process.env.PRODATA_USER || "desconhecido",
+    });
     next(error);
   }
 });
@@ -715,11 +862,46 @@ app.post("/api/public/boletos/imprimir-virtual", async (req, res, next) => {
         .json({ error: "Nao foi possivel gerar o PDF do DUAM virtual." });
     }
 
+    registrarAuditoria({
+      tipo_operacao: "impressao_boleto_virtual",
+      sig_endpoint: ENDPOINTS.imprimirDuamVirtual,
+      sig_status_code: 200,
+      resultado: "OK",
+      cpf_cnpj_solicitante_hash: hashDocumento(req.body?.cpfCnpj || ""),
+      cpf_cnpj_solicitante_masked: maskDocumento(req.body?.cpfCnpj || ""),
+      origin_ip: req.ip || req.headers["x-forwarded-for"],
+      origin_user_agent: req.headers["user-agent"],
+      credencial_servico: process.env.PRODATA_USER || "desconhecido",
+    });
+
     res.setHeader("Content-Type", "application/pdf");
     res.send(pdf);
   } catch (error) {
+    registrarAuditoria({
+      tipo_operacao: "impressao_boleto_virtual",
+      sig_endpoint: ENDPOINTS.imprimirDuamVirtual,
+      sig_status_code: error?.status || 500,
+      resultado: "ERRO_TECNICO",
+      cpf_cnpj_solicitante_hash: hashDocumento(req.body?.cpfCnpj || ""),
+      cpf_cnpj_solicitante_masked: maskDocumento(req.body?.cpfCnpj || ""),
+      origin_ip: req.ip || req.headers["x-forwarded-for"],
+      origin_user_agent: req.headers["user-agent"],
+      credencial_servico: process.env.PRODATA_USER || "desconhecido",
+    });
     next(error);
   }
+});
+
+app.get("/admin/auditoria/boletos", (req, res) => {
+  if (ADMIN_API_KEY && req.headers["x-admin-key"] !== ADMIN_API_KEY) {
+    return res.status(401).json({ error: "Nao autorizado." });
+  }
+  const limit = Math.min(
+    parseInt(req.query.limit || "100", 10),
+    AUDITORIA_MAX_ITENS,
+  );
+  const itens = auditoriaBuffer.slice(-limit).reverse();
+  res.json({ total: auditoriaBuffer.length, itens });
 });
 
 app.post("/functions/consultarContribuinte", async (req, res, next) => {
